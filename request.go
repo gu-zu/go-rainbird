@@ -53,7 +53,6 @@ func (rb *Device) message(data string, rbres string) ([]byte, error) {
 	result := new(rbresponse)
 	json.Unmarshal(response, result)
 	if result.Id != rb.msgid-1 {
-		log.Println("Incorrect reponse id", result.Id, rb.msgid)
 		return nil, fmt.Errorf("incorrect response id: %d->%d", rb.msgid, result.Id)
 	}
 	dt := result.Result.Data
@@ -79,7 +78,6 @@ func (rb *Device) methodmsg(data string) (*WifiResult, error) {
 	result := new(rbwifires)
 	json.Unmarshal(response, result)
 	if result.Id != rb.msgid-1 {
-		log.Println("Incorrect reponse id", result.Id, rb.msgid)
 		return nil, fmt.Errorf("incorrect response id: %d->%d", rb.msgid, result.Id)
 	}
 	return &result.Result, nil
@@ -89,7 +87,6 @@ func (rb *Device) send(input string, wf int) ([]byte, error) {
 	rb.msgid++
 	req, err := http.NewRequest("POST", "http://"+rb.ip+"/stick", body)
 	if err != nil {
-		log.Println("HTTP request make error:", err.Error())
 		return nil, err
 	}
 	req.Header.Add("Content-Length", fmt.Sprint(body.Len()))
@@ -113,7 +110,6 @@ func (rb *Device) send(input string, wf int) ([]byte, error) {
 		return nil, fmt.Errorf("incorrect password %s %s", rb.ip, rb.pass)
 	}
 	if res.StatusCode != 200 {
-		log.Println("HTTP error response", res.StatusCode, res.Status, rbody)
 		return nil, fmt.Errorf("non 200 statusCode %d %s %s", res.StatusCode, res.Status, rbody)
 	}
 	return decrypt(rbody, rb.pass), nil
