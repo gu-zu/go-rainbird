@@ -22,12 +22,16 @@ const (
 var IntervalName = map[irrigationInterval]string{Icustom: "custom", Iodd: "odd", Ieven: "even", Icyclic: "cyclic"}
 
 type Schedule struct {
-	Duration   time.Duration // duration this zone will be turned on
-	Time       []time.Time   // max 6, only hour and minute are used, year and date are always 0
-	Interval   irrigationInterval
-	customDays byte
+	Duration   time.Duration      // duration this zone will be turned on
+	Time       []time.Time        // maximum of 6 entries, only hour and minute component are used, year and date are set to 0
+	Interval   irrigationInterval // interval mode
+	customDays byte               // active days when using custom irrigationinterval. Use IsActive() and SetActive() methods to interface with this property
 }
 
+/*
+Check whether some day is active within this schedule instance.
+0 = monday, ..., 6 = sunday
+*/
 func (sched *Schedule) IsActive(day int) bool {
 	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
 		day = -1
@@ -38,6 +42,10 @@ func (sched *Schedule) IsActive(day int) bool {
 	return (sched.customDays & (1 << (day + 1))) != 0
 }
 
+/*
+Set the provided day as active.
+0 = monday, ..., 6 = sunday
+*/
 func (sched *Schedule) SetActive(day int) {
 	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
 		day = -1
@@ -48,13 +56,16 @@ func (sched *Schedule) SetActive(day int) {
 	sched.customDays = sched.customDays | (1 << (day + 1))
 }
 
+/*
+Returns a human readable string describing the schedule
+*/
 func (sched *Schedule) String() string {
 	return fmt.Sprintf("Schedule: ontime: %s, at: %s, schedule: %s [mon:%t tue:%t wed:%t thu:%t fri:%t sat:%t sun:%t]", sched.Duration.String(), sched.Time, IntervalName[sched.Interval], sched.IsActive(0), sched.IsActive(1), sched.IsActive(2), sched.IsActive(3), sched.IsActive(4), sched.IsActive(5), sched.IsActive(6))
 }
 
 // == DEVICE CMD FUNCTIONS ==
 
-func (rb *device) GetModelandVersion() (string, error) {
+func (rb *Device) GetModelandVersion() (string, error) {
 	res, err := rb.message("02", "82")
 	if err != nil {
 		return "", err
@@ -63,8 +74,8 @@ func (rb *device) GetModelandVersion() (string, error) {
 	return fmt.Sprintf("%s, %d.%d", model, res[3], res[4]), nil
 }
 
-// returns the number of active zone, if none active returns 0
-func (rb *device) GetCurrentState() (int, error) {
+// Returns the number of the active zone, if none active returns 0
+func (rb *Device) GetCurrentState() (int, error) {
 	res, err := rb.message("3F00", "BF")
 	if err != nil {
 		return 0, err
@@ -76,7 +87,8 @@ func (rb *device) GetCurrentState() (int, error) {
 	return zone, nil
 }
 
-func (rb *device) GetSchedule(zone int) (*Schedule, error) {
+// Fetch current schedule from the controller
+func (rb *Device) GetSchedule(zone int) (*Schedule, error) {
 	res, err := rb.message("20000"+fmt.Sprint(zone), "A0")
 	if len(res) != 14 {
 		return new(Schedule), fmt.Errorf("invalid rainbird response: %v", res)
@@ -97,7 +109,8 @@ func (rb *device) GetSchedule(zone int) (*Schedule, error) {
 	return sched, nil
 }
 
-func (rb *device) SetSchedule(zone int, Schedule *Schedule) error {
+// Set a new schedule for the zone specified
+func (rb *Device) SetSchedule(zone int, Schedule *Schedule) error {
 	msg := make([]byte, 12)
 	msg[0] = byte(zone)
 	msg[1] = byte(Schedule.Duration.Minutes())
@@ -119,7 +132,8 @@ func (rb *device) SetSchedule(zone int, Schedule *Schedule) error {
 }
 
 // TODO - find out if 100 min irrigation time is max of app or max of controller
-func (rb *device) RunManual(zone int, minutes int) error {
+// Manually run a zone
+func (rb *Device) RunManual(zone int, minutes int) error {
 	_, err := rb.message(fmt.Sprintf("39000%d%s", zone, hex.EncodeToString([]byte{byte(minutes)})), "01")
 	if err != nil {
 		return err
@@ -127,7 +141,8 @@ func (rb *device) RunManual(zone int, minutes int) error {
 	return nil
 }
 
-func (rb *device) StopManual(zone int) error {
+// Stop manually running zone before previously specified duration
+func (rb *Device) StopManual(zone int) error {
 	_, err := rb.message("40", "01")
 	if err != nil {
 		return err
@@ -135,14 +150,17 @@ func (rb *device) StopManual(zone int) error {
 	return nil
 }
 
-func (rb *device) GetTime() (time.Time, error) {
+// Get the controllers time
+func (rb *Device) GetTime() (time.Time, error) {
 	res, err := rb.message("10", "90")
 	if err != nil {
 		return time.Time{}, err
 	}
 	return time.Date(0, 1, 1, int(res[1]), int(res[2]), int(res[3]), 0, time.Local), err
 }
-func (rb *device) SetTime(t time.Time) error {
+
+// Set the controllers time
+func (rb *Device) SetTime(t time.Time) error {
 	data := []byte{byte(t.Hour()), byte(t.Minute()), byte(t.Second())}
 	_, err := rb.message("11"+hex.EncodeToString(data), "01")
 	if err != nil {
@@ -151,7 +169,8 @@ func (rb *device) SetTime(t time.Time) error {
 	return nil
 }
 
-func (rb *device) GetDate() (time.Time, error) {
+// Get the controllers date
+func (rb *Device) GetDate() (time.Time, error) {
 	res, err := rb.message("12", "92")
 	if err != nil {
 		return time.Time{}, err
@@ -163,7 +182,8 @@ func (rb *device) GetDate() (time.Time, error) {
 	return time.Date(int(yr[0])*256+int(yr[1]), time.Month(mth[0]), int(day[0]), 0, 0, 0, 0, time.Local), nil
 }
 
-func (rb *device) SetDate(t time.Time) error {
+// Set the controllers date
+func (rb *Device) SetDate(t time.Time) error {
 	_, err := rb.message("13"+hex.EncodeToString([]byte{byte(t.Day())})+hex.EncodeToString([]byte{byte(t.Month())})[1:2]+hex.EncodeToString([]byte{byte(t.Year() / 256), byte(t.Year() % 256)})[1:4], "01")
 	if err != nil {
 		return err
@@ -172,7 +192,7 @@ func (rb *device) SetDate(t time.Time) error {
 }
 
 // Returns raindelay in days
-func (rb *device) GetRainDelay() (int, error) {
+func (rb *Device) GetRainDelay() (int, error) {
 	res, err := rb.message("36", "B6")
 	if err != nil {
 		return 0, err
@@ -183,7 +203,9 @@ func (rb *device) GetRainDelay() (int, error) {
 	fmt.Println(res)
 	return int(res[1])*256 + int(res[2]), nil
 }
-func (rb *device) SetRainDelay(days byte) error {
+
+// Set rain delay in days
+func (rb *Device) SetRainDelay(days byte) error {
 	_, err := rb.message("3700"+hex.EncodeToString([]byte{days}), "01")
 	if err != nil {
 		return err
@@ -191,7 +213,8 @@ func (rb *device) SetRainDelay(days byte) error {
 	return nil
 }
 
-func (rb *device) GetWifi() (*wifiResult, error) {
+// Get information regarding wifi from the controller
+func (rb *Device) GetWifi() (*wifiResult, error) {
 	return rb.methodmsg("getWifiParams")
 }
 
