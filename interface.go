@@ -132,6 +132,7 @@ func (rb *Device) SetSchedule(zone int, Schedule *Schedule) error {
 }
 
 // TODO - find out if 100 min irrigation time is max of app or max of controller
+
 // Manually run a zone
 func (rb *Device) RunManual(zone int, minutes int) error {
 	_, err := rb.message(fmt.Sprintf("39000%d%s", zone, hex.EncodeToString([]byte{byte(minutes)})), "01")
@@ -213,8 +214,21 @@ func (rb *Device) SetRainDelay(days byte) error {
 	return nil
 }
 
+// Returns if on or off (1|0). Seems to only be influenced by front panel off button
+func (rb *Device) GetIrrigationState() (byte, error) {
+	res, err := rb.message("48", "C8")
+	if err != nil {
+		return 0, err
+	}
+	fmt.Println(res)
+	if len(res) != 2 {
+		return 0, fmt.Errorf("invalid rainbird response: %v", res)
+	}
+	return res[1], nil
+}
+
 // Get information regarding wifi from the controller
-func (rb *Device) GetWifi() (*wifiResult, error) {
+func (rb *Device) GetWifi() (*WifiResult, error) {
 	return rb.methodmsg("getWifiParams")
 }
 
@@ -244,7 +258,7 @@ func (rb *Device) GetWifi() (*wifiResult, error) {
 3B -> todo
 40 -> done
 42 -> NOT SUPPORTED BY RZXe
-48 -> todo
+48 -> done
 49 -> NOT SUPPORTED BY RZXe
 4A -> NOT SUPPORTED BY RZXe
 4B -> NOT SUPPORTED BY RZXe

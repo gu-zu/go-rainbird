@@ -26,9 +26,9 @@ type result struct {
 }
 type rbwifires struct {
 	Id     int        `json:"id"`
-	Result wifiResult `json:"result"`
+	Result WifiResult `json:"result"`
 }
-type wifiResult struct {
+type WifiResult struct {
 	MacAddress     string `json:"macAddress"`
 	Ip             string `json:"localIpAddress"`
 	NetMask        string `json:"localNetmask"`
@@ -44,9 +44,9 @@ type wifiResult struct {
 }
 
 // TODO - add paran for res length/type to check for error res
-func (rb *device) message(data string, rbres string) ([]byte, error) {
+func (rb *Device) message(data string, rbres string) ([]byte, error) {
 	body := packageMsg(rb.msgid, data)
-	response, err := rb.send(body)
+	response, err := rb.send(body, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -70,9 +70,9 @@ func (rb *device) message(data string, rbres string) ([]byte, error) {
 	output, err := hex.DecodeString(dt)
 	return output, err //returning here anyway, so caller will check whether hex resulted in an error
 }
-func (rb *device) methodmsg(data string) (*wifiResult, error) {
+func (rb *Device) methodmsg(data string) (*WifiResult, error) {
 	body := packageMethod(rb.msgid, data)
-	response, err := rb.send(body)
+	response, err := rb.send(body, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (rb *device) methodmsg(data string) (*wifiResult, error) {
 	}
 	return &result.Result, nil
 }
-func (rb *device) send(input string) ([]byte, error) {
+func (rb *Device) send(input string, wf int) ([]byte, error) {
 	body := bytes.NewReader(encrypt(input, rb.pass))
 	rb.msgid++
 	req, err := http.NewRequest("POST", "http://"+rb.ip+"/stick", body)
@@ -97,23 +97,24 @@ func (rb *device) send(input string) ([]byte, error) {
 	// "User-Agent": "RainBird/2.0 CFNetwork/811.5.4 Darwin/16.7.0",
 	start := time.Now()
 	res, err := http.DefaultClient.Do(req)
-	log.Println("Request for", input[66:69], "took", time.Since(start)) // avg 1 second
+	if wf == 0 {
+		log.Println("Request for", input[66:69], "took", time.Since(start)) // avg 1 second
+	} else {
+		log.Println("Request for wifiparms took", time.Since(start)) // avg 1 second
+	}
 	if err != nil {
-		log.Println("HTTP request do error:", err.Error())
 		return nil, err
 	}
 	rbody, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Println("HTTP request read error:", err.Error())
 		return nil, err
 	}
 	if res.StatusCode == 403 {
-		log.Println("Incorrect password", rb.ip, rb.pass)
-		return nil, fmt.Errorf("incorrect password")
+		return nil, fmt.Errorf("incorrect password %s %s", rb.ip, rb.pass)
 	}
 	if res.StatusCode != 200 {
 		log.Println("HTTP error response", res.StatusCode, res.Status, rbody)
-		return nil, fmt.Errorf("non 200 statusCode %d", res.StatusCode)
+		return nil, fmt.Errorf("non 200 statusCode %d %s %s", res.StatusCode, res.Status, rbody)
 	}
 	return decrypt(rbody, rb.pass), nil
 }
