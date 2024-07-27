@@ -22,7 +22,7 @@ const (
 var IntervalName = map[irrigationInterval]string{Icustom: "custom", Iodd: "odd", Ieven: "even", Icyclic: "cyclic"}
 
 type Schedule struct {
-	Duration   time.Duration      // duration this zone will be turned on
+	Duration   time.Duration      // duration this zone will be turned on. (Is internally converted to an integer value in minutes for the rainbird API)
 	Time       []time.Time        // maximum of 6 entries, only hour and minute component are used, year and date are set to 0
 	Interval   irrigationInterval // interval mode
 	customDays byte               // active days when using custom irrigationinterval. Use IsActive() and SetActive() methods to interface with this property
