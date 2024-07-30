@@ -99,7 +99,6 @@ func (rb *Device) send(input string, wf int) ([]byte, error) {
 	}
 	req.Header.Add("Content-Length", fmt.Sprint(body.Len()))
 	req.Header.Add("Content-Type", "application/octet-stream")
-	req.Header.Add("User-Agent", "RainBird/2.0 CFNetwork/811.5.4 Darwin/16.7.0")
 	// "User-Agent": "RainBird/2.0 CFNetwork/811.5.4 Darwin/16.7.0",
 	//start := time.Now()
 	res, err := http.DefaultClient.Do(req)
