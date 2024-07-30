@@ -13,7 +13,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type rbresponse struct {
@@ -43,17 +42,24 @@ type WifiResult struct {
 	StickVer       string `json:"stickVersion"`
 }
 
-// TODO - add paran for res length/type to check for error res
+//delete(cache, data) after update of this type
+
 func (rb *Device) message(data string, rbres string) ([]byte, error) {
-	body := packageMsg(rb.msgid, data)
+	if _, ok := rb.cache[data]; rb.useCache && ok {
+		return rb.cache[data], nil
+	}
+	curid := rb.msgid
+	rb.msgid++
+	rb.msgid %= 10
+	body := packageMsg(curid, data)
 	response, err := rb.send(body, 0)
 	if err != nil {
 		return nil, err
 	}
 	result := new(rbresponse)
 	json.Unmarshal(response, result)
-	if result.Id != rb.msgid-1 {
-		return nil, fmt.Errorf("incorrect response id: %d->%d", rb.msgid, result.Id)
+	if result.Id != curid {
+		return nil, fmt.Errorf("incorrect response id: %d->%d", curid, result.Id)
 	}
 	dt := result.Result.Data
 	if dt[:2] == "00" {
@@ -67,6 +73,9 @@ func (rb *Device) message(data string, rbres string) ([]byte, error) {
 		return nil, fmt.Errorf("rainbird unexpected response %s, expected %s", dt[:2], rbres)
 	}
 	output, err := hex.DecodeString(dt)
+	if rb.useCache && err == nil && strings.Contains("36|02|20", data[0:2]) {
+		rb.cache[data] = output
+	}
 	return output, err //returning here anyway, so caller will check whether hex resulted in an error
 }
 func (rb *Device) methodmsg(data string) (*WifiResult, error) {
@@ -84,7 +93,6 @@ func (rb *Device) methodmsg(data string) (*WifiResult, error) {
 }
 func (rb *Device) send(input string, wf int) ([]byte, error) {
 	body := bytes.NewReader(encrypt(input, rb.pass))
-	rb.msgid++
 	req, err := http.NewRequest("POST", "http://"+rb.ip+"/stick", body)
 	if err != nil {
 		return nil, err
@@ -92,17 +100,18 @@ func (rb *Device) send(input string, wf int) ([]byte, error) {
 	req.Header.Add("Content-Length", fmt.Sprint(body.Len()))
 	req.Header.Add("Content-Type", "application/octet-stream")
 	// "User-Agent": "RainBird/2.0 CFNetwork/811.5.4 Darwin/16.7.0",
-	start := time.Now()
+	//start := time.Now()
 	res, err := http.DefaultClient.Do(req)
-	if wf == 0 {
-		log.Println("Request for", input[66:69], "took", time.Since(start)) // avg 1 second
+	/*if wf == 0 {
+		log.Println("Request for", input[66:68], "took", time.Since(start)) // avg 1 second
 	} else {
 		log.Println("Request for wifiparms took", time.Since(start)) // avg 1 second
-	}
+	}*/
 	if err != nil {
 		return nil, err
 	}
 	rbody, err := io.ReadAll(res.Body)
+	res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +119,7 @@ func (rb *Device) send(input string, wf int) ([]byte, error) {
 		return nil, fmt.Errorf("incorrect password %s %s", rb.ip, rb.pass)
 	}
 	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("non 200 statusCode %d %s %s", res.StatusCode, res.Status, rbody)
+		return nil, fmt.Errorf("non 200 statusCode %s %s", res.Status, rbody)
 	}
 	return decrypt(rbody, rb.pass), nil
 }
