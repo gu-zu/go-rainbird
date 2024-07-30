@@ -10,22 +10,22 @@ import (
 
 // == DATA TYPES ==
 
-type irrigationInterval int
+type IrrigationInterval int
 
 const (
-	Icustom irrigationInterval = iota
+	Icustom IrrigationInterval = iota
 	Iodd
 	Ieven
 	Icyclic
 )
 
-var IntervalName = map[irrigationInterval]string{Icustom: "custom", Iodd: "odd", Ieven: "even", Icyclic: "cyclic"}
+var IntervalName = map[IrrigationInterval]string{Icustom: "custom", Iodd: "odd", Ieven: "even", Icyclic: "cyclic"}
 
 type Schedule struct {
 	Duration   time.Duration      // duration this zone will be turned on. (Is internally converted to an integer value in minutes for the rainbird API)
 	Time       []time.Time        // maximum of 6 entries, only hour and minute component are used, year and date are set to 0
-	Interval   irrigationInterval // interval mode
-	customDays byte               // active days when using custom irrigationinterval. Use IsActive() and SetActive() methods to interface with this property
+	Interval   IrrigationInterval // interval mode
+	CustomDays byte               // For custom IrrigationInterval. Preferably use IsActive(), SetActive() and SetInactive() methods to interface with this property
 }
 
 /*
@@ -36,10 +36,10 @@ func (sched *Schedule) IsActive(day int) bool {
 	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
 		day = -1
 	}
-	if day < 0 || day > 6 {
+	if day < -1 || day > 5 {
 		return false // not a valid day
 	}
-	return (sched.customDays & (1 << (day + 1))) != 0
+	return (sched.CustomDays & (1 << (day + 1))) != 0
 }
 
 /*
@@ -53,7 +53,21 @@ func (sched *Schedule) SetActive(day int) {
 	if day < 0 || day > 6 {
 		return // not a valid day
 	}
-	sched.customDays = sched.customDays | (1 << (day + 1))
+	sched.CustomDays = sched.CustomDays | (1 << (day + 1))
+}
+
+/*
+Set the provided day as inactive.
+0 = monday, ..., 6 = sunday
+*/
+func (sched *Schedule) SetInactive(day int) {
+	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
+		day = -1
+	}
+	if day < 0 || day > 6 {
+		return // not a valid day
+	}
+	sched.CustomDays = sched.CustomDays & ^(1 << (day + 1))
 }
 
 /*
@@ -74,7 +88,7 @@ func (rb *Device) GetModelandVersion() (string, error) {
 	return fmt.Sprintf("%s, %d.%d", model, res[3], res[4]), nil
 }
 
-// Returns the number of the active zone, if none active returns 0
+// Returns the number of the active zone(starting at 1), if none active returns 0
 func (rb *Device) GetCurrentState() (int, error) {
 	res, err := rb.message("3F00", "BF")
 	if err != nil {
@@ -87,7 +101,7 @@ func (rb *Device) GetCurrentState() (int, error) {
 	return zone, nil
 }
 
-// Fetch current schedule from the controller
+// Fetch current schedule from the controller (zone starting at 1)
 func (rb *Device) GetSchedule(zone int) (*Schedule, error) {
 	res, err := rb.message("20000"+fmt.Sprint(zone), "A0")
 	if len(res) != 14 {
@@ -99,7 +113,7 @@ func (rb *Device) GetSchedule(zone int) (*Schedule, error) {
 	if int(res[2]) != zone {
 		return new(Schedule), fmt.Errorf("invalid rainbird response zone: %d->%d", zone, res[2])
 	}
-	sched := &Schedule{time.Duration(res[3]) * time.Minute, []time.Time{}, irrigationInterval(res[10]), res[11]}
+	sched := &Schedule{time.Duration(res[3]) * time.Minute, []time.Time{}, IrrigationInterval(res[10]), res[11]}
 	for i := 4; i < 10; i++ {
 		if res[i] != 144 {
 			t := time.Date(0, 1, 1, int(math.Floor(float64(res[i])/6)), int(res[i]%6)*10, 0, 0, time.Local)
@@ -111,6 +125,7 @@ func (rb *Device) GetSchedule(zone int) (*Schedule, error) {
 
 // Set a new schedule for the zone specified
 func (rb *Device) SetSchedule(zone int, Schedule *Schedule) error {
+	delete(rb.cache, "20000"+fmt.Sprint(zone))
 	msg := make([]byte, 12)
 	msg[0] = byte(zone)
 	msg[1] = byte(Schedule.Duration.Minutes())
@@ -122,7 +137,7 @@ func (rb *Device) SetSchedule(zone int, Schedule *Schedule) error {
 		}
 	}
 	msg[8] = byte(Schedule.Interval)
-	msg[9] = Schedule.customDays
+	msg[9] = Schedule.CustomDays
 	msg[10] = 2 // TODO - fix this byte, seems to be soil type
 	_, err := rb.message("2100"+hex.EncodeToString(msg), "01")
 	if err != nil {
@@ -201,12 +216,12 @@ func (rb *Device) GetRainDelay() (int, error) {
 	if len(res) != 3 {
 		return 0, fmt.Errorf("invalid rainbird response: %v", res)
 	}
-	fmt.Println(res)
 	return int(res[1])*256 + int(res[2]), nil
 }
 
 // Set rain delay in days
 func (rb *Device) SetRainDelay(days byte) error {
+	delete(rb.cache, "36")
 	_, err := rb.message("3700"+hex.EncodeToString([]byte{days}), "01")
 	if err != nil {
 		return err
@@ -220,7 +235,6 @@ func (rb *Device) GetIrrigationState() (byte, error) {
 	if err != nil {
 		return 0, err
 	}
-	fmt.Println(res)
 	if len(res) != 2 {
 		return 0, fmt.Errorf("invalid rainbird response: %v", res)
 	}
