@@ -50,7 +50,7 @@ func (sched *Schedule) SetActive(day int) {
 	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
 		day = -1
 	}
-	if day < 0 || day > 6 {
+	if day < -1 || day > 5 {
 		return // not a valid day
 	}
 	sched.CustomDays = sched.CustomDays | (1 << (day + 1))
@@ -64,7 +64,7 @@ func (sched *Schedule) SetInactive(day int) {
 	if day == 6 { // SUNDAY IS NOT THE FIRST DAY OF THE WEEK
 		day = -1
 	}
-	if day < 0 || day > 6 {
+	if day < -1 || day > 5 {
 		return // not a valid day
 	}
 	sched.CustomDays = sched.CustomDays & ^(1 << (day + 1))
