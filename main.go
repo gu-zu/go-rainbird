@@ -19,7 +19,7 @@ func Get(ip string, pass string) *Device {
 }
 
 /*
-	Enable in memory caching of user-set commands.
+Enable in memory caching of user-set commands.
 
 Cache the current schedules for a zone, raindelay and modelandversion,
 cache will automatically update if new values are set through this api.
