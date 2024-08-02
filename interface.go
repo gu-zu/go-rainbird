@@ -124,6 +124,8 @@ func (rb *Device) GetSchedule(zone int) (*Schedule, error) {
 }
 
 // Set a new schedule for the zone specified
+//
+// Rainbird servers(e.g. official app) seem to cache the schedule, and as this command is run locally, may not reflect actual state after running this func.
 func (rb *Device) SetSchedule(zone int, Schedule *Schedule) error {
 	delete(rb.cache, "20000"+fmt.Sprint(zone))
 	msg := make([]byte, 12)
