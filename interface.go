@@ -30,6 +30,7 @@ type Schedule struct {
 
 /*
 Check whether some day is active within this schedule instance.
+
 0 = monday, ..., 6 = sunday
 */
 func (sched *Schedule) IsActive(day int) bool {
@@ -44,6 +45,7 @@ func (sched *Schedule) IsActive(day int) bool {
 
 /*
 Set the provided day as active.
+
 0 = monday, ..., 6 = sunday
 */
 func (sched *Schedule) SetActive(day int) {
@@ -58,6 +60,7 @@ func (sched *Schedule) SetActive(day int) {
 
 /*
 Set the provided day as inactive.
+
 0 = monday, ..., 6 = sunday
 */
 func (sched *Schedule) SetInactive(day int) {
